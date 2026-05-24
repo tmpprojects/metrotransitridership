@@ -1,0 +1,4 @@
+# Only needed for `python3 build-data.py --fetch` (downloading the FTA
+# workbook and exporting its sheets to CSV). The default rebuild from
+# existing CSVs in data/ uses only the Python standard library.
+openpyxl>=3.1

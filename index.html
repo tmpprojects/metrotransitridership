@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Metro Transit Ridership (Twin Cities)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --bg: #fafafa;
+        --fg: #222;
+        --muted: #666;
+        --grid: #e5e5e5;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px 24px 48px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 16px;
+        font-size: 14px;
+      }
+      .source {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .source a { color: inherit; }
+      #chart { width: 100%; }
+      .axis path, .axis line {
+        stroke: #ccc;
+      }
+      .axis text {
+        fill: var(--muted);
+        font-size: 11px;
+      }
+      .grid line {
+        stroke: var(--grid);
+        stroke-dasharray: 2 2;
+      }
+      .grid path { stroke: none; }
+      .series-label {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .line {
+        fill: none;
+        stroke-width: 1.8;
+      }
+      .event-line {
+        stroke: #888;
+        stroke-width: 1;
+        stroke-dasharray: 3 3;
+      }
+      .event-label {
+        font-size: 11px;
+        fill: #555;
+      }
+      .event-dot {
+        fill: #555;
+      }
+      h2 {
+        font-size: 16px;
+        margin: 28px 0 4px;
+      }
+      .baseline {
+        stroke: #999;
+        stroke-width: 1;
+        stroke-dasharray: 4 3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Metro Transit ridership, by mode</h1>
+      <p class="subtitle">
+        Monthly unlinked passenger trips (UPT), Twin Cities — NTD ID 50027.
+      </p>
+      <div id="chart"></div>
+
+      <h2>Why is bus ridership climbing again?</h2>
+      <p class="subtitle">
+        Bus ridership and service supply since 2019, each indexed to January 2020 = 100.
+        The gap between service restored and riders returned is the story.
+      </p>
+      <div id="chart2"></div>
+
+      <p class="source">
+        Source: Federal Transit Administration,
+        <a href="https://www.transit.dot.gov/ntd/data-product/monthly-module-adjusted-data-release">
+          Monthly Module Adjusted Data Release</a>, National Transit Database.
+      </p>
+    </div>
+
+    <script src="vendor/d3.v7.min.js"></script>
+    <script src="data/metro-transit.js"></script>
+    <script>
+    (function () {
+
+      const METRO_TRANSIT_NTD_ID = "50027";
+
+      const MODE_LABELS = {
+        MB: "Bus",
+        LR: "Light Rail",
+        RB: "Bus Rapid Transit",
+        CR: "Commuter Rail (Northstar)",
+      };
+
+      const MODE_COLORS = {
+        MB: "#1f77b4",
+        LR: "#d62728",
+        RB: "#2ca02c",
+        CR: "#9467bd",
+      };
+
+      const EVENTS = [
+        { date: new Date(2004, 5, 26), label: "Blue Line opens" },
+        { date: new Date(2009, 10, 16), label: "Northstar opens" },
+        { date: new Date(2014, 5, 14), label: "Green Line opens" },
+        { date: new Date(2020, 2, 1), label: "COVID-19" },
+      ];
+
+      // Data is loaded via <script src="data/metro-transit.js"> in the page
+      // head, which sets window.METRO_DATA. Embedding the data this way lets
+      // index.html render when opened with file:// (browsers block fetch() on
+      // that scheme but happily load a same-folder <script src>).
+      const DATA = window.METRO_DATA;
+      if (!DATA) {
+        document.getElementById("chart").innerHTML =
+          '<p style="color:#a00">Missing data/metro-transit.js — run <code>python3 build-data.py</code>.</p>';
+        throw new Error("window.METRO_DATA not loaded");
+      }
+
+      const toPoints = (arr) =>
+        arr.map((d) => {
+          // Parse "YYYY-MM-DD" as a LOCAL date (not UTC) so equality checks
+          // against local-anchored Date constructions match. `new Date("2020-01-01")`
+          // is UTC midnight, which is a different .getTime() from
+          // `new Date(2020, 0, 1)` once you cross a time zone.
+          const [y, m, day] = d.date.split("-").map(Number);
+          return { date: new Date(y, m - 1, day), value: d.value };
+        });
+
+      const seriesByMode = new Map(
+        Object.entries(DATA.upt).map(([mode, points]) => [mode, toPoints(points)])
+      );
+
+      const series = Array.from(seriesByMode, ([mode, values]) => ({
+        mode,
+        label: MODE_LABELS[mode],
+        color: MODE_COLORS[mode],
+        values: values.sort((a, b) => a.date - b.date),
+      })).sort((a, b) => d3.max(b.values, (d) => d.value) - d3.max(a.values, (d) => d.value));
+
+      const container = document.getElementById("chart");
+      const width = Math.max(640, container.clientWidth);
+      const height = 480;
+      const margin = { top: 52, right: 160, bottom: 36, left: 64 };
+
+      const svg = d3
+        .select(container)
+        .append("svg")
+        .attr("viewBox", `0 0 ${width} ${height}`)
+        .attr("width", "100%")
+        .attr("height", height);
+
+      const allValues = series.flatMap((s) => s.values);
+      const x = d3
+        .scaleTime()
+        .domain(d3.extent(allValues, (d) => d.date))
+        .range([margin.left, width - margin.right]);
+
+      const y = d3
+        .scaleLinear()
+        .domain([0, d3.max(allValues, (d) => d.value)])
+        .nice()
+        .range([height - margin.bottom, margin.top]);
+
+      svg
+        .append("g")
+        .attr("class", "grid")
+        .attr("transform", `translate(${margin.left},0)`)
+        .call(
+          d3
+            .axisLeft(y)
+            .tickSize(-(width - margin.left - margin.right))
+            .tickFormat("")
+        );
+
+      svg
+        .append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(0,${height - margin.bottom})`)
+        .call(
+          d3
+            .axisBottom(x)
+            .ticks(d3.timeYear.every(2))
+            .tickFormat(d3.timeFormat("%Y"))
+        );
+
+      const millionsFormat = (d) => d3.format(",")(Math.round(d / 1e6));
+
+      svg
+        .append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(${margin.left},0)`)
+        .call(d3.axisLeft(y).ticks(6).tickFormat(millionsFormat))
+        .call((g) =>
+          g
+            .append("text")
+            .attr("x", -margin.left + 8)
+            .attr("y", 14)
+            .attr("fill", "var(--muted)")
+            .attr("text-anchor", "start")
+            .text("Unlinked passenger trips per month (millions)")
+        );
+
+      const eventLayer = svg.append("g").attr("class", "events");
+      const visibleEvents = EVENTS.filter(
+        (e) => e.date >= x.domain()[0] && e.date <= x.domain()[1]
+      );
+
+      eventLayer
+        .selectAll("line")
+        .data(visibleEvents)
+        .join("line")
+        .attr("class", "event-line")
+        .attr("x1", (d) => x(d.date))
+        .attr("x2", (d) => x(d.date))
+        .attr("y1", margin.top)
+        .attr("y2", height - margin.bottom);
+
+      eventLayer
+        .selectAll("circle")
+        .data(visibleEvents)
+        .join("circle")
+        .attr("class", "event-dot")
+        .attr("cx", (d) => x(d.date))
+        .attr("cy", margin.top)
+        .attr("r", 2.5);
+
+      eventLayer
+        .selectAll("text")
+        .data(visibleEvents)
+        .join("text")
+        .attr("class", "event-label")
+        .attr("x", (d) => x(d.date))
+        .attr("y", margin.top - 6)
+        .attr("text-anchor", "middle")
+        .text((d) => d.label);
+
+      const line = d3
+        .line()
+        .x((d) => x(d.date))
+        .y((d) => y(d.value))
+        .defined((d) => d.value != null);
+
+      svg
+        .append("g")
+        .selectAll("path")
+        .data(series)
+        .join("path")
+        .attr("class", "line")
+        .attr("stroke", (d) => d.color)
+        .attr("d", (d) => line(d.values));
+
+      const labels = svg
+        .append("g")
+        .selectAll("text")
+        .data(series)
+        .join("text")
+        .attr("class", "series-label")
+        .attr("fill", (d) => d.color)
+        .attr("x", width - margin.right + 8)
+        .attr("y", (d) => {
+          const last = d.values[d.values.length - 1];
+          return last ? y(last.value) : margin.top;
+        })
+        .attr("dy", "0.32em")
+        .text((d) => d.label);
+
+      const placed = [];
+      labels.each(function (d) {
+        const node = d3.select(this);
+        let yPos = +node.attr("y");
+        const minGap = 14;
+        for (const taken of placed) {
+          if (Math.abs(yPos - taken) < minGap) yPos = taken + minGap;
+        }
+        placed.push(yPos);
+        node.attr("y", yPos);
+      });
+
+      // ---------------------------------------------------------------------
+      // Indexed comparison panel: Bus UPT vs Bus VRM, Jan 2020 = 100.
+      // Same y-axis so the gap between "service restored" and "riders returned"
+      // is honestly proportional and readable.
+      // ---------------------------------------------------------------------
+
+      const busVrm = toPoints(DATA.vrmBus);
+      const busUpt = seriesByMode.get("MB") ?? [];
+
+      const BASELINE_DATE = new Date(2020, 0, 1);
+      const PANEL_START = new Date(2019, 0, 1);
+
+      function indexSeries(points) {
+        const baseline = points.find(
+          (p) => p.date.getTime() === BASELINE_DATE.getTime()
+        );
+        if (!baseline || !baseline.value) return [];
+        return points
+          .filter((p) => p.date >= PANEL_START)
+          .map((p) => ({ date: p.date, value: (p.value / baseline.value) * 100 }));
+      }
+
+      const indexedSeries = [
+        {
+          key: "upt",
+          label: "Bus ridership (UPT)",
+          color: "#1f77b4",
+          values: indexSeries(busUpt),
+        },
+        {
+          key: "vrm",
+          label: "Bus service (revenue miles)",
+          color: "#888",
+          values: indexSeries(busVrm),
+        },
+      ];
+
+      const container2 = document.getElementById("chart2");
+      const width2 = Math.max(640, container2.clientWidth);
+      const height2 = 280;
+      const margin2 = { top: 20, right: 200, bottom: 30, left: 48 };
+
+      const svg2 = d3
+        .select(container2)
+        .append("svg")
+        .attr("viewBox", `0 0 ${width2} ${height2}`)
+        .attr("width", "100%")
+        .attr("height", height2);
+
+      const allIndexedPoints = indexedSeries.flatMap((s) => s.values);
+
+      const x2 = d3
+        .scaleTime()
+        .domain(d3.extent(allIndexedPoints, (d) => d.date))
+        .range([margin2.left, width2 - margin2.right]);
+
+      const y2 = d3
+        .scaleLinear()
+        .domain([0, 110])
+        .range([height2 - margin2.bottom, margin2.top]);
+
+      svg2
+        .append("g")
+        .attr("class", "grid")
+        .attr("transform", `translate(${margin2.left},0)`)
+        .call(
+          d3
+            .axisLeft(y2)
+            .tickValues([0, 25, 50, 75, 100])
+            .tickSize(-(width2 - margin2.left - margin2.right))
+            .tickFormat("")
+        );
+
+      svg2
+        .append("line")
+        .attr("class", "baseline")
+        .attr("x1", margin2.left)
+        .attr("x2", width2 - margin2.right)
+        .attr("y1", y2(100))
+        .attr("y2", y2(100));
+
+      svg2
+        .append("text")
+        .attr("class", "event-label")
+        .attr("x", margin2.left + 6)
+        .attr("y", y2(100) - 4)
+        .attr("text-anchor", "start")
+        .text("Jan 2020 baseline (100)");
+
+      svg2
+        .append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(0,${height2 - margin2.bottom})`)
+        .call(d3.axisBottom(x2).ticks(d3.timeYear.every(1)).tickFormat(d3.timeFormat("%Y")));
+
+      svg2
+        .append("g")
+        .attr("class", "axis")
+        .attr("transform", `translate(${margin2.left},0)`)
+        .call(d3.axisLeft(y2).tickValues([0, 25, 50, 75, 100]));
+
+      const line2 = d3
+        .line()
+        .x((d) => x2(d.date))
+        .y((d) => y2(d.value));
+
+      svg2
+        .append("g")
+        .selectAll("path")
+        .data(indexedSeries)
+        .join("path")
+        .attr("class", "line")
+        .attr("stroke", (d) => d.color)
+        .attr("d", (d) => line2(d.values));
+
+      svg2
+        .append("g")
+        .selectAll("text")
+        .data(indexedSeries)
+        .join("text")
+        .attr("class", "series-label")
+        .attr("fill", (d) => d.color)
+        .attr("x", width2 - margin2.right + 8)
+        .attr("y", (d) => {
+          const last = d.values[d.values.length - 1];
+          return last ? y2(last.value) : margin2.top;
+        })
+        .attr("dy", "0.32em")
+        .text((d) => d.label);
+
+      const latest = indexedSeries.map((s) => ({
+        label: s.label,
+        last: s.values[s.values.length - 1],
+      }));
+      console.log("Latest indexed values:", latest);
+    })();
+    </script>
+  </body>
+</html>
