@@ -33,12 +33,15 @@
         margin: 0 0 16px;
         font-size: 14px;
       }
-      .source {
+      .source, .footer {
         margin-top: 12px;
         color: var(--muted);
         font-size: 12px;
       }
-      .source a { color: inherit; }
+      .source a, .footer a { color: inherit; }
+      .footer {
+        margin-top: 8px;
+      }
       #chart { width: 100%; }
       .axis path, .axis line {
         stroke: #ccc;
@@ -102,6 +105,9 @@
         Source: Federal Transit Administration,
         <a href="https://www.transit.dot.gov/ntd/data-product/monthly-module-adjusted-data-release">
           Monthly Module Adjusted Data Release</a>, National Transit Database.
+      </p>
+      <p class="footer">
+        <a href="https://github.com/tmpprojects/metrotransitridership">Source on GitHub</a>
       </p>
     </div>
 
