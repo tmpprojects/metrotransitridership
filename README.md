@@ -109,3 +109,7 @@ Following the [workshop prompts](https://tcplot.com/claude-code/):
 Federal Transit Administration. *Monthly Module Adjusted Data Release.*
 National Transit Database, U.S. Department of Transportation.
 <https://www.transit.dot.gov/ntd/data-product/monthly-module-adjusted-data-release>
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
