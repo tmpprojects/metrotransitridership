@@ -6,11 +6,15 @@ using the FTA's National Transit Database Monthly Module data.
 
 ## Run it
 
-Two ways, both work:
+Three ways, all work:
 
-**A. Just open it.** Double-click `index.html` (or open with your browser). No server, no setup. The data is pre-extracted into `data/metro-transit.js` and D3 is bundled locally in `vendor/`, so `file://` works fine.
+**A. GitHub Pages (no clone).** The chart is published as a static site — open it in any browser:
 
-**B. Local HTTP server.** Slightly nicer for live-editing because you can refresh and devtools cooperate better:
+<https://tmpprojects.github.io/metrotransitridership/>
+
+**B. Just open it.** Double-click `index.html` (or open with your browser). No server, no setup. The data is pre-extracted into `data/metro-transit.js` and D3 is bundled locally in `vendor/`, so `file://` works fine.
+
+**C. Local HTTP server.** Slightly nicer for live-editing because you can refresh and devtools cooperate better:
 
 ```bash
 python3 -m http.server 8000
