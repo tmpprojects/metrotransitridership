@@ -110,6 +110,10 @@ Federal Transit Administration. *Monthly Module Adjusted Data Release.*
 National Transit Database, U.S. Department of Transportation.
 <https://www.transit.dot.gov/ntd/data-product/monthly-module-adjusted-data-release>
 
+## Development notes
+
+The code for this project was generated using [Cursor](https://cursor.com/) with the **Opus 4.7 Extra High** model.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
